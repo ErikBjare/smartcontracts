@@ -7,64 +7,91 @@ contract Ballot {
 
     struct Voter {
         uint votesAwarded;
+        uint votesDelegated;
         uint votesPlaced;
-        string vote;
-        address delegate;
     }
 
     struct Proposal {
         uint voteCount;
+        string name;
     }
+
+    event VoteEvent(string _proposalName, uint _votes, address _voter);
 
     address chairperson;
     mapping(address => Voter) voters;
-    mapping(string => Proposal) proposals;
-    string leadingProposal;
 
-    /// Create a new ballot with $(_numProposals) different proposals.
+    Proposal[] proposals;
+    //mapping(string => uint8) proposalsByName;
+
+    /// Create a new ballot.
     function Ballot() {
         chairperson = msg.sender;
         voters[chairperson].votesAwarded = 1;
     }
 
-    /// Give $(votes) number of votes to voter $(voter)
-    /// May only be called by $(chairperson).
-    function giveVotes(address voter, uint8 votes) {
+    /// INTERNAL: Returns the remaining votes available for use by the calling Voter
+    function remainingVotes() internal returns (uint _votes) {
+        Voter storage voter = voters[msg.sender];
+        return voter.votesAwarded
+             - voter.votesDelegated
+             - voter.votesPlaced;
+    }
+
+    /// Name a proposal, can only be done by the chairperson.
+    function addProposal(string _name) {
         if (msg.sender != chairperson) return;
-        if (voters[voter].votesPlaced >= voters[voter].votesAwarded) return;
-        voters[voter].votesAwarded = 1;
+
+        // Prevent two proposals with identical names
+        for (uint8 proposal = 0; proposal < proposals.length; proposal++) {
+            if (sha3(proposals[proposal].name) == sha3(_name)) return;
+        }
+
+        // Create the proposal
+        proposals.length += 1;
+        proposals[proposals.length-1] = Proposal(0, _name);
+    }
+
+    /// Give voter $(voter) an additional $(votes) votes.
+    /// May only be called by $(chairperson).
+    function giveVotes(address voter, uint votes) {
+        if (msg.sender != chairperson) return;
+        voters[voter].votesAwarded += votes;
     }
 
     /// Delegate your vote to the voter $(to).
-    function delegate(address to, uint8 votes) {
+    function delegate(address _to, uint _votes) {
         Voter storage sender = voters[msg.sender]; // assigns reference
-        if (sender.votesPlaced >= sender.weight + votes) return;
+        if (remainingVotes() <= _votes) return;
 
-        // Resolves an eventual delegation chain
-        while (voters[to].delegate != address(0) && voters[to].delegate != msg.sender)
-            to = voters[to].delegate;
+        // Forbid sending votes to oneself, prevents int overflow exploit.
+        // TODO: int overflow still possible by delegating to another account and then back.
+        if (msg.sender == _to) return;
 
-        if (to == msg.sender) return;
-
-        sender.votesPlaced += votes;
-        sender.delegate = to;
-        Voter storage delegateTo = voters[to];
-        if (delegateTo.voted)
-            proposals[delegateTo.vote].voteCount += sender.votesender.weight;
-        else
-            delegateTo.weight += sender.weight;
+        sender.votesPlaced += _votes;
+        Voter storage delegateTo = voters[_to];
+        delegateTo.votesAwarded += _votes;
     }
 
     /// Place a vote
-    function vote(string _proposalName) {
-        Voter storage sender = voters[msg.sender];
-        if (sender.voted) return;
-        sender.voted = true;
-        sender.vote = _proposalName;
-        proposals[_proposalName].voteCount += sender.weight;
+    function vote(uint8 _proposalId, uint _votes) {
+        Voter storage _sender      = voters[msg.sender];
+        Proposal storage _proposal = proposals[_proposalId];
+        if (remainingVotes() < _votes) return;
+
+        _sender.votesPlaced -= _votes;
+        _proposal.voteCount += _votes;
+
+        VoteEvent(_proposal.name, _votes, msg.sender);
     }
 
-    function winningProposal() constant returns (string _winningProposal) {
-        return leadingProposal;
+    function winningProposal() constant returns (uint8 _winningProposal) {
+        uint256 winningVoteCount = 0;
+        for (uint8 proposal = 0; proposal < proposals.length; proposal++) {
+            if (proposals[proposal].voteCount > winningVoteCount) {
+                winningVoteCount = proposals[proposal].voteCount;
+                _winningProposal = proposal;
+            }
+        }
     }
 }
