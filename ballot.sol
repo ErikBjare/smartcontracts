@@ -2,74 +2,69 @@
 // Based on the example here: https://github.com/ethereum/browser-solidity/blob/3a8f60d85a097a16a28a46ddd2aee3cdcdcad0c4/src/app/editor/example-contracts.js
 
 pragma solidity ^0.4.0;
+
 contract Ballot {
 
     struct Voter {
-        uint weight;
-        bool voted;
-        uint8 vote;
+        uint votesAwarded;
+        uint votesPlaced;
+        string vote;
         address delegate;
     }
+
     struct Proposal {
         uint voteCount;
-        string name;
     }
 
     address chairperson;
     mapping(address => Voter) voters;
-    Proposal[] proposals;
+    mapping(string => Proposal) proposals;
+    string leadingProposal;
 
     /// Create a new ballot with $(_numProposals) different proposals.
-    function Ballot(uint8 _numProposals) {
+    function Ballot() {
         chairperson = msg.sender;
-        voters[chairperson].weight = 1;
-        proposals.length = _numProposals;
+        voters[chairperson].votesAwarded = 1;
     }
 
-    /// Give $(voter) the right to vote on this ballot.
+    /// Give $(votes) number of votes to voter $(voter)
     /// May only be called by $(chairperson).
-    function giveRightToVote(address voter) {
-        if (msg.sender != chairperson || voters[voter].voted) return;
-        voters[voter].weight = 1;
-    }
-
-    /// Name each proposal
-    function nameProposal(uint8 _id, string _name) {
+    function giveVotes(address voter, uint8 votes) {
         if (msg.sender != chairperson) return;
-        proposals[_id].name = _name;
+        if (voters[voter].votesPlaced >= voters[voter].votesAwarded) return;
+        voters[voter].votesAwarded = 1;
     }
 
     /// Delegate your vote to the voter $(to).
-    function delegate(address to) {
+    function delegate(address to, uint8 votes) {
         Voter storage sender = voters[msg.sender]; // assigns reference
-        if (sender.voted) return;
+        if (sender.votesPlaced >= sender.weight + votes) return;
+
+        // Resolves an eventual delegation chain
         while (voters[to].delegate != address(0) && voters[to].delegate != msg.sender)
             to = voters[to].delegate;
+
         if (to == msg.sender) return;
-        sender.voted = true;
+
+        sender.votesPlaced += votes;
         sender.delegate = to;
         Voter storage delegateTo = voters[to];
         if (delegateTo.voted)
-            proposals[delegateTo.vote].voteCount += sender.weight;
+            proposals[delegateTo.vote].voteCount += sender.votesender.weight;
         else
             delegateTo.weight += sender.weight;
     }
 
-    /// Give a single vote to proposal $(proposal).
-    function vote(uint8 proposal) {
+    /// Place a vote
+    function vote(string _proposalName) {
         Voter storage sender = voters[msg.sender];
-        if (sender.voted || proposal >= proposals.length) return;
+        if (sender.voted) return;
         sender.voted = true;
-        sender.vote = proposal;
-        proposals[proposal].voteCount += sender.weight;
+        sender.vote = _proposalName;
+        proposals[_proposalName].voteCount += sender.weight;
     }
 
-    function winningProposal() constant returns (uint8 _winningProposal) {
-        uint256 winningVoteCount = 0;
-        for (uint8 proposal = 0; proposal < proposals.length; proposal++)
-            if (proposals[proposal].voteCount > winningVoteCount) {
-                winningVoteCount = proposals[proposal].voteCount;
-                _winningProposal = proposal;
-            }
+    function winningProposal() constant returns (string _winningProposal) {
+        return leadingProposal;
     }
 }
