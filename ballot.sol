@@ -3,6 +3,7 @@
 
 pragma solidity ^0.4.0;
 contract Ballot {
+
     struct Voter {
         uint weight;
         bool voted;
@@ -11,22 +12,33 @@ contract Ballot {
     }
     struct Proposal {
         uint voteCount;
+        string name;
     }
+
     address chairperson;
     mapping(address => Voter) voters;
     Proposal[] proposals;
+
     /// Create a new ballot with $(_numProposals) different proposals.
     function Ballot(uint8 _numProposals) {
         chairperson = msg.sender;
         voters[chairperson].weight = 1;
         proposals.length = _numProposals;
     }
+
     /// Give $(voter) the right to vote on this ballot.
     /// May only be called by $(chairperson).
     function giveRightToVote(address voter) {
         if (msg.sender != chairperson || voters[voter].voted) return;
         voters[voter].weight = 1;
     }
+
+    /// Name each proposal
+    function nameProposal(uint8 _id, string _name) {
+        if (msg.sender != chairperson) return;
+        proposals[_id].name = _name;
+    }
+
     /// Delegate your vote to the voter $(to).
     function delegate(address to) {
         Voter storage sender = voters[msg.sender]; // assigns reference
@@ -42,6 +54,7 @@ contract Ballot {
         else
             delegateTo.weight += sender.weight;
     }
+
     /// Give a single vote to proposal $(proposal).
     function vote(uint8 proposal) {
         Voter storage sender = voters[msg.sender];
@@ -50,6 +63,7 @@ contract Ballot {
         sender.vote = proposal;
         proposals[proposal].voteCount += sender.weight;
     }
+
     function winningProposal() constant returns (uint8 _winningProposal) {
         uint256 winningVoteCount = 0;
         for (uint8 proposal = 0; proposal < proposals.length; proposal++)
