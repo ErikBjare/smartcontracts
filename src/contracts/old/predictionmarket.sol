@@ -1,12 +1,12 @@
 // A simple binary prediction market
 
-pragma solidity ^0.4.0;
+pragma solidity ^0.8.4;
 
 contract PredictionMarket {
     enum Outcome { Yes, No, Invalid }
 
     struct Prediction {
-        address payoutAddress;
+        address payable payoutAddress;
         uint shares;
         Outcome option;
     }
@@ -24,8 +24,8 @@ contract PredictionMarket {
 
     Prediction[] predictions;
 
-    function PredictionMarket(string _question) payable {
-        require(msg.value >= 0);
+    constructor(string memory _question) payable {
+        require(msg.value >= 0, "Must be created with an initial deposit");
 
         oracle = msg.sender;
         pot = msg.value;
@@ -34,17 +34,16 @@ contract PredictionMarket {
         yesPot = pot/2;
         noPot  = pot - yesPot;
 
-        predictions.length = 2;
-        predictions[0] = Prediction(msg.sender, yesPot, Outcome.Yes);
-        predictions[1] = Prediction(msg.sender, noPot, Outcome.No);
+        predictions.push(Prediction(payable(msg.sender), yesPot, Outcome.Yes));
+        predictions.push(Prediction(payable(msg.sender), noPot, Outcome.No));
     }
 
     modifier onlyBy(address _account) {
-        require(msg.sender == _account);
+        require(msg.sender == _account, "Access denied");
         _;
     }
 
-    function predict(bool _option) payable {
+    function predict(bool _option) public payable {
         if(msg.value <= 0 || finalized) return;
 
         pot += msg.value;
@@ -54,27 +53,26 @@ contract PredictionMarket {
             noPot += msg.value;
         }
 
-        predictions.length += 1;
-        predictions[predictions.length-1] = Prediction(msg.sender, msg.value, _option ? Outcome.Yes : Outcome.No);
+        predictions.push(Prediction(payable(msg.sender), msg.value, _option ? Outcome.Yes : Outcome.No));
     }
 
-    function finalize(bool _option) onlyBy(oracle) {
+    function finalize(bool _option) public onlyBy(oracle) {
         if(finalized) return;
 
         outcome = _option ? Outcome.Yes : Outcome.No;
         finalized = true;
     }
 
-    function getPot() constant returns (uint _pot) {
+    function getPot() public view returns (uint _pot) {
         _pot = pot;
     }
 
-    function price() constant returns (uint _yesPrice, uint _noPrice) {
+    function price() public view returns (uint _yesPrice, uint _noPrice) {
         _yesPrice = (1 ether * pot) / yesPot;
         _noPrice = (1 ether * pot) / noPot;
     }
 
-    function payout() {
+    function payout() public {
         if(!finalized || payedout) return;
 
         uint256 _outcomePot;
@@ -86,6 +84,8 @@ contract PredictionMarket {
             _outcomePot = pot;
         }
 
+        payedout = true;
+
         uint256 _valuePerShare = pot / _outcomePot;
         for(uint i=0; i<predictions.length; i++) {
             Prediction storage _pred = predictions[i];
@@ -94,7 +94,5 @@ contract PredictionMarket {
                 _pred.payoutAddress.transfer(_payout);
             }
         }
-
-        payedout = true;
     }
 }
