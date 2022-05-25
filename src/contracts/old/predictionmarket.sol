@@ -13,10 +13,10 @@ contract PredictionMarket {
 
     address oracle;
     string question;
-    uint256 pot;
+    uint pot;
 
-    uint256 yesPot;
-    uint256 noPot;
+    uint yesPot;
+    uint noPot;
 
     bool finalized = false;
     Outcome outcome = Outcome.Invalid;
